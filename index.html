@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<meta name="description" content="Life Territory — a competitive Conway's Game of Life strategy game. Build Life, capture territory, and outgrow your rivals.">
+<title>Life Territory — Conway's Game of Life Strategy</title>
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<style>
+:root{
+  --bg:#0b1020;--panel:#111827;--panel2:#182235;--ink:#f8fafc;--mut:#9ca3af;
+  --grid:#263449;--accent:#f59e0b;--good:#34d399;--danger:#fb7185;
+  --p1:#34d399;--p2:#fb923c;--p3:#60a5fa;--p4:#c084fc;
+  --shadow:0 18px 50px rgba(0,0,0,.28)
+}
+*{box-sizing:border-box}
+html{background:var(--bg);scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(circle at 50% -20%,#1d2940 0,var(--bg) 48%);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{width:min(1120px,100%);margin:auto;padding:18px 14px 28px}
+header{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:12px}
+h1{font-size:clamp(22px,4vw,32px);margin:0;letter-spacing:-.03em}
+.sub{color:var(--mut);font-size:13px;margin-top:3px}
+.controls,.toolbar,.transport,.netbar{display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin:9px 0}
+.group{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:8px;box-shadow:var(--shadow)}
+label{font-size:13px;color:var(--mut);display:flex;align-items:center;gap:6px}
+button,select,input[type="text"]{font:inherit;color:var(--ink);background:var(--panel2);border:1px solid var(--grid);border-radius:9px;padding:8px 11px}
+button{cursor:pointer}
+input[type="text"]{min-width:140px}
+button:hover,select:hover{border-color:#52627b}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:#17120a;border-color:var(--accent);font-weight:800}
+button.on{background:#f8fafc;color:#111827;border-color:#f8fafc;font-weight:700}
+button:disabled{opacity:.45;cursor:not-allowed}
+.statrow{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.stat{background:var(--panel);border:2px solid transparent;border-radius:10px;padding:7px 10px;font-size:13px;min-width:110px}
+.stat.cur{border-color:var(--ink)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+#sbar{height:13px;display:flex;position:relative;overflow:hidden;border-radius:7px;background:var(--grid);margin:8px 0 12px}
+#sbar i{height:100%;display:block;transition:width .25s}
+#sbar:after{content:"";position:absolute;left:var(--thr,50%);top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 5px #000}
+.boardwrap{position:relative;background:var(--panel);border:1px solid var(--grid);padding:8px;border-radius:14px;box-shadow:var(--shadow)}
+canvas{display:block;width:100%;height:auto;background:#0e1625;border-radius:8px;touch-action:none;cursor:crosshair}
+#msg{min-height:22px;margin:8px 2px;font-size:14px;font-weight:700;color:var(--accent)}
+.netstatus{font-size:13px;font-weight:600;color:var(--good);margin-left:6px}
+.help{color:var(--mut);font-size:13px;line-height:1.5;margin:10px 2px}
+kbd{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--grid);border-bottom-width:2px;border-radius:4px;padding:1px 4px;color:var(--ink)}
+details{background:var(--panel);border:1px solid var(--grid);border-radius:12px;padding:9px 11px;margin-top:10px}
+summary{cursor:pointer;font-weight:700}
+.rules{color:var(--mut);font-size:13px;line-height:1.55}
+.rules b{color:var(--ink)}
+.hide{display:none!important}
+@media(max-width:650px){
+ main{padding:12px 9px 22px}.group{width:100%}header{align-items:flex-start}
+ button,select{padding:8px 9px}.stat{min-width:0;flex:1}
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><h1>Life Territory</h1><div class="sub">Conway's Game of Life meets territorial strategy.</div></div>
+  <button id="rst" class="primary" title="Start a new match">New local game</button>
+</header>
+
+<div class="netbar group">
+  <button id="hostBtn" class="primary">Host Online Match</button>
+  <span style="color:var(--mut)">or</span>
+  <input type="text" id="joinId" placeholder="Enter Room ID" />
+  <button id="joinBtn">Join Match</button>
+  <span id="netStatus" class="netstatus"></span>
+</div>
+
+<div class="controls">
+  <div class="group">
+    <label>Players <select id="np"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+  </div>
+  <div class="group">
+    <label>AI rivals <input type="checkbox" id="ai"></label>
+  </div>
+  <div class="group">
+    <label>Generations / turn <select id="gpt"><option value="3">3</option><option value="6" selected>6</option><option value="10">10</option></select></label>
+  </div>
+  <div class="group">
+    <label>Speed <select id="spd"><option value="300">Slow</option><option value="120" selected>Normal</option><option value="45">Fast</option></select></label>
+  </div>
+</div>
+
+<div class="statrow" id="board"></div>
+<div id="sbar" aria-label="Territory share"></div>
+
+<div class="toolbar group" id="tools">
+  <button data-t="draw" class="on">Draw</button>
+  <button data-t="buy">Buy area · 2/cell</button>
+  <button data-t="glider">Glider · 10</button>
+  <button data-t="lwss">LWSS · 18</button>
+  <button data-t="ship">Spaceship · 22</button>
+  <button data-t="rpent">R-pentomino · 14</button>
+  <button data-t="pulsar">Pulsar · 28</button>
+  <button data-t="acorn">Acorn · 20</button>
+  <select id="dir" title="Pattern direction">
+    <option value="1,1">SE ↘</option><option value="-1,1">SW ↙</option>
+    <option value="1,-1">NE ↗</option><option value="-1,-1">NW ↖</option>
+  </select>
+  <button id="clr">Clear my cells</button>
+</div>
+
+<div class="transport">
+  <span id="solo"><button id="run">Play</button><button id="step">Step</button></span>
+  <button id="end" class="hide primary">End turn</button>
+  <span class="sub">Hotkeys: <kbd>1</kbd>–<kbd>8</kbd> tools · <kbd>Enter</kbd> end turn</span>
+</div>
+
+<div class="boardwrap">
+  <canvas id="c" aria-label="Life Territory board"></canvas>
+</div>
+<div id="msg" role="status" aria-live="polite"></div>
+
+<details>
+ <summary>How to play</summary>
+ <div class="rules">
+  <p><b>Build:</b> Draw live cells only on your territory. Use <b>Buy area</b> to spend Space on unclaimed cells.</p>
+  <p><b>Launch:</b> Conway patterns are strategic stamps. A pattern must start on your land and costs Space.</p>
+  <p><b>Turn cycle:</b> In multiplayer, players build in sequence. End your turn and the board advances the selected number of generations. You then receive <b>5 Space + 1 per 10 land cells</b>.</p>
+  <p><b>Territory:</b> Living cells claim the cell they occupy. A newborn cell takes the owner of the majority of its three parents.</p>
+  <p><b>Win:</b> In multiplayer, reach 50% of the board or be the only player with territory. In solo mode, reach 60%.</p>
+ </div>
+</details>
+</main>
+
+<script>
+'use strict';
+const W=64,H=40,S=14,cv=document.getElementById('c'),cx=cv.getContext('2d');
+const COL=['','#34d399','#fb923c','#60a5fa','#c084fc'];
+const STARTS=[[4,16],[52,16],[28,3],[28,29]];
+cv.width=W*S;cv.height=H*S;
+
+let nb=new Uint8Array(W*H),hov=null,gid=0,N=2,cur=1;
+let space=[],live,own,gen=0,tool='draw',timer=null,running=false,anim=false,over=false,drag=null,paint=1;
+
+let peer = null, conn = null;
+let assignedPlayer = 0;
+
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const land=p=>{let c=0;for(let i=0;i<W*H;i++)if(own[i]===p)c++;return c};
+const msg=s=>{$('msg').textContent=s};
+
+const PAT={
+ glider:{c:10,w:3,h:3,p:[[1,0],[2,1],[0,2],[1,2],[2,2]]},
+ lwss:{c:18,w:4,h:4,p:[[1,0],[2,0],[3,0],[0,1],[3,1],[3,2],[0,3],[2,3]]},
+ ship:{c:22,w:5,h:4,p:[[1,0],[4,0],[0,1],[0,2],[4,2],[0,3],[1,3],[2,3],[3,3]]},
+ rpent:{c:14,w:3,h:3,p:[[1,0],[2,0],[0,1],[1,1],[1,2]]},
+ pulsar:{c:28,w:13,h:13,p:[
+ [2,0],[3,0],[4,0],[8,0],[9,0],[10,0],[0,2],[5,2],[7,2],[12,2],
+ [0,3],[5,3],[7,3],[12,3],[0,4],[5,4],[7,4],[12,4],
+ [2,5],[3,5],[4,5],[8,5],[9,5],[10,5],
+ [2,7],[3,7],[4,7],[8,7],[9,7],[10,7],[0,8],[5,8],[7,8],[12,8],
+ [0,9],[5,9],[7,9],[12,9],[0,10],[5,10],[7,10],[12,10],
+ [2,12],[3,12],[4,12],[8,12],[9,12],[10,12]]},
+ acorn:{c:20,w:7,h:3,p:[[1,0],[3,1],[0,2],[1,2],[4,2],[5,2],[6,2]]}
+};
+
+function reset(syncNet = true){
+ clearInterval(timer);timer=null;running=anim=over=false;gid++;
+ nb=new Uint8Array(W*H);N=+$('np').value;cur=1;gen=0;
+ space=[0,60,60,60,60];live=new Uint8Array(W*H);own=new Uint8Array(W*H);
+ for(let p=1;p<=N;p++){
+   const [sx,sy]=STARTS[p-1];
+   for(let y=sy;y<sy+8;y++)for(let x=sx;x<sx+8;x++)own[y*W+x]=p;
+ }
+ $('run').textContent='Play';$('solo').classList.toggle('hide',N>1);$('end').classList.toggle('hide',N===1);$('sbar').style.setProperty('--thr',(N===1?60:50)+'%');
+ updateTurnMsg();
+ draw();
+ if(syncNet && conn && conn.open) sendState();
+}
+
+function updateTurnMsg(){
+ if(over) return;
+ if(assignedPlayer > 0){
+   if(cur === assignedPlayer) msg(`Your turn (Player ${assignedPlayer})! Place cells/patterns and click End Turn.`);
+   else msg(`Opponent's turn (Player ${cur}). Waiting for their move…`);
+ } else {
+   msg(N>1?`Player ${cur} to move.`:'Solo mode: build toward 60% territory.');
+ }
+}
+
+function locked(){
+ if(anim || over) return true;
+ if(assignedPlayer > 0 && cur !== assignedPlayer) return true;
+ return false;
+}
+
+function cell(e){
+ const r=cv.getBoundingClientRect();
+ return [Math.max(0,Math.min(W-1,Math.floor((e.clientX-r.left)/r.width*W))),
+         Math.max(0,Math.min(H-1,Math.floor((e.clientY-r.top)/r.height*H)))];
+}
+function pcells(P,x,y,d){
+ const ox=d[0]>0?x:x-P.w+1,oy=d[1]>0?y:y-P.h+1;
+ return P.p.map(([a,b])=>[ox+(d[0]>0?a:P.w-1-a),oy+(d[1]>0?b:P.h-1-b)]);
+}
+function launch(P,x,y,d,pl){
+ const c=pcells(P,x,y,d);
+ if(c.some(([a,b])=>a<0||b<0||a>=W||b>=H))return false;
+ c.forEach(([a,b])=>live[b*W+a]=pl);return true;
+}
+function aiMove(p){
+ const mine=[],free=[];
+ for(let i=0;i<W*H;i++){if(own[i]===p)mine.push(i);else if(!own[i])free.push(i)}
+ if(!mine.length)return;
+ const R=a=>a[(Math.random()*a.length)|0];
+ for(let k=0;k<12;k++){
+   const q=R(mine),x=q%W,y=(q/W)|0;
+   const xx=x+(Math.random()*7|0)-3,yy=y+(Math.random()*7|0)-3;
+   if(xx>=0&&yy>=0&&xx<W&&yy<H&&own[yy*W+xx]===p&&!live[yy*W+xx])live[yy*W+xx]=p;
+ }
+ const choices=Object.keys(PAT).filter(k=>space[p]>=PAT[k].c);
+ if(choices.length&&free.length){
+   const key=choices[(Math.random()*choices.length)|0],P=PAT[key],q=R(mine);
+   const sx=q%W,sy=(q/W)|0,target=R(free),tx=target%W,ty=(target/W)|0;
+   if(launch(P,sx,sy,[tx>=sx?1:-1,ty>=sy?1:-1],p))space[p]-=P.c;
+ }
+ const q=R(mine),x=q%W,y=(q/W)|0,r=[Math.max(0,x-2),Math.max(0,y-2),Math.min(W-1,x+2),Math.min(H-1,y+2)],cc=cost(r);
+ if(cc>0&&cc<=space[p]){
+   space[p]-=cc;
+   for(let yy=r[1];yy<=r[3];yy++)for(let xx=r[0];xx<=r[2];xx++)if(!own[yy*W+xx])own[yy*W+xx]=p;
+ }
+}
+function stepGen(){
+ const n=new Uint8Array(W*H);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+   let c=0;const cnt=[0,0,0,0,0];
+   for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+     if(!dx&&!dy)continue;const a=x+dx,b=y+dy;
+     if(a>=0&&a<W&&b>=0&&b<H){const v=live[b*W+a];if(v){c++;cnt[v]++}}
+   }
+   const i=y*W+x;
+   if(live[i]) n[i]=(c===2||c===3)?live[i]:0;
+   else if(c===3){
+     let m=0,cand=[];for(let p=1;p<=N;p++)if(cnt[p]>m)m=cnt[p];
+     for(let p=1;p<=N;p++)if(cnt[p]===m)cand.push(p);
+     n[i]=cand.includes(own[i])?own[i]:cand[(x+y+gen)%cand.length];
+   }
+ }
+ for(let i=0;i<W*H;i++)nb[i]=(n[i]&&!live[i])?1:0;
+ live=n;gen++;
+ for(let i=0;i<W*H;i++)if(live[i]&&own[i]!==live[i]){
+   own[i]=live[i];space[live[i]]++;
+ }
+ checkWin();draw();
+}
+function checkWin(){
+ if(over)return;
+ const thr=N===1 ? 0.60 : 0.50;let alive=[];
+ for(let p=1;p<=N;p++){
+   const l=land(p);if(l>0)alive.push(p);
+   if(l>=W*H*thr)return win(p);
+ }
+ if(N>1&&alive.length===1)win(alive[0]);
+}
+function win(p){
+ over=true;clearInterval(timer);timer=null;running=anim=false;
+ if(assignedPlayer > 0){
+   msg(p === assignedPlayer ? 'Victory! You won the game!' : 'Game Over. Player ' + p + ' won.');
+ } else {
+   msg(N===1?'Victory in '+gen+' generations!':'Player '+p+' wins!');
+ }
+}
+function endTurn(isRemote = false){
+ if(!isRemote && locked()) return;
+ if(!isRemote && conn && conn.open){
+   sendTurnAction();
+ }
+ anim=true;let left=+$('gpt').value;msg('Simulating…');
+ timer=setInterval(()=>{
+   stepGen();if(over)return;
+   if(--left<=0){
+     clearInterval(timer);timer=null;anim=false;
+     nextPlayer();
+     if(!isRemote && conn && conn.open) sendState();
+   }
+ },+$('spd').value);
+}
+function nextPlayer(){
+ let attempts=0;
+ do{cur=cur%N+1;if(++attempts>N)break}while(land(cur)===0);
+ const inc=5+Math.floor(land(cur)/10);space[cur]+=inc;
+ updateTurnMsg();draw();
+ if($('ai').checked&&cur>1&&!over){
+   const g=gid;anim=true;msg('Player '+cur+' (AI) is thinking…');
+   setTimeout(()=>{if(g!==gid)return;aiMove(cur);draw();
+     setTimeout(()=>{if(g===gid){anim=false;endTurn()}},350)},350);
+ }
+}
+function rect(a,b){return[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])]}
+function cost(r){let c=0;for(let y=r[1];y<=r[3];y++)for(let x=r[0];x<=r[2];x++)if(!own[y*W+x])c+=2;return c}
+function draw(){
+ cx.fillStyle=css('--panel');cx.fillRect(0,0,cv.width,cv.height);
+ for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+   const i=y*W+x;
+   if(own[i]){cx.globalAlpha=.25;cx.fillStyle=COL[own[i]];cx.fillRect(x*S,y*S,S,S);cx.globalAlpha=1}
+   if(live[i]){
+     cx.fillStyle=COL[live[i]];cx.fillRect(x*S+1,y*S+1,S-2,S-2);
+     if(nb[i]){cx.fillStyle='rgba(255,255,255,.55)';cx.fillRect(x*S+4,y*S+4,S-8,S-8)}
+   }
+ }
+ cx.strokeStyle=css('--grid');cx.lineWidth=1;cx.beginPath();
+ for(let x=0;x<=W;x++){cx.moveTo(x*S+.5,0);cx.lineTo(x*S+.5,H*S)}
+ for(let y=0;y<=H;y++){cx.moveTo(0,y*S+.5);cx.lineTo(W*S,y*S+.5)}
+ cx.stroke();
+ if(drag&&tool==='buy'){
+   const r=rect(drag.a,drag.b);cx.strokeStyle=css('--accent');cx.lineWidth=3;
+   cx.strokeRect(r[0]*S,r[1]*S,(r[2]-r[0]+1)*S,(r[3]-r[1]+1)*S);
+   cx.fillStyle=css('--accent');cx.font='bold 14px sans-serif';cx.fillText('Cost '+cost(r),r[0]*S+4,Math.max(14,r[1]*S-4));
+ }
+ if(hov&&PAT[tool]&&!locked()){
+   const d=$('dir').value.split(',').map(Number),P=PAT[tool];cx.globalAlpha=.45;cx.fillStyle=COL[cur];
+   pcells(P,hov[0],hov[1],d).forEach(([a,b])=>{if(a>=0&&b>=0&&a<W&&b<H)cx.fillRect(a*S+1,b*S+1,S-2,S-2)});
+   cx.globalAlpha=1;
+ }
+ let h='';
+ for(let p=1;p<=N;p++)h+='<span class="stat'+(N>1&&p===cur&&!over?' cur':'')+'"><span class="dot" style="background:'+COL[p]+'"></span>'+
+   (N>1?'P'+p+' ':'')+'Space <b>'+space[p]+'</b> · Land <b>'+Math.round(land(p)/(W*H)*100)+'%</b></span>';
+ $('board').innerHTML=h;
+ let sb='';for(let p=1;p<=N;p++)sb+='<i style="width:'+land(p)/(W*H)*100+'%;background:'+COL[p]+'"></i>';
+ $('sbar').innerHTML=sb;$('sbar').style.setProperty('--thr',(N===1?60:50)+'%');
+}
+
+cv.addEventListener('pointerdown',e=>{
+ if(locked())return;cv.setPointerCapture(e.pointerId);const p=cell(e),i=p[1]*W+p[0];
+ if(tool==='draw'){
+   if(own[i]!==cur){msg('Draw only on your own land.');return}
+   if(live[i]&&live[i]!==cur)return;
+   paint=live[i]?0:cur;live[i]=paint;drag={a:p};draw();
+   sendLiveCell(i, paint);
+ }else if(tool==='buy'){drag={a:p,b:p};draw()}
+ else{
+   const d=$('dir').value.split(',').map(Number),P=PAT[tool];
+   if(own[i]!==cur){msg('Launch from your own land.');return}
+   if(space[cur]<P.c){msg('Need '+P.c+' Space.');return}
+   if(!launch(P,p[0],p[1],d,cur)){msg('Too close to the edge.');return}
+   space[cur]-=P.c;draw();
+   sendState();
+ }
+});
+cv.addEventListener('pointermove',e=>{
+ const p=cell(e);hov=p;
+ if(!drag||locked()){if(PAT[tool])draw();return}
+ const i=p[1]*W+p[0];
+ if(tool==='draw'){
+   if(own[i]===cur&&(!live[i]||live[i]===cur)){
+     live[i]=paint;draw();
+     sendLiveCell(i, paint);
+   }
+ } else if(tool==='buy'){drag.b=p;draw()}
+});
+cv.addEventListener('pointerup',()=>{
+ if(!drag)return;
+ if(tool==='buy'&&!locked()){
+   const r=rect(drag.a,drag.b),c=cost(r);
+   if(c===0)msg('No free land in that rectangle.');
+   else if(c>space[cur])msg('Need '+c+' Space, you have '+space[cur]+'.');
+   else{
+     space[cur]-=c;
+     for(let y=r[1];y<=r[3];y++)for(let x=r[0];x<=r[2];x++)if(!own[y*W+x])own[y*W+x]=cur;
+     msg('Bought land for '+c+' Space.');checkWin();
+     sendState();
+   }
+ }
+ drag=null;draw();
+});
+cv.addEventListener('pointerleave',()=>{hov=null;draw()});
+$('dir').onchange=draw;
+document.querySelectorAll('#tools button[data-t]').forEach(b=>b.onclick=()=>{
+ tool=b.dataset.t;
+ document.querySelectorAll('#tools button[data-t]').forEach(x=>x.classList.toggle('on',x===b));draw();
+});
+$('run').onclick=()=>{
+ if(over)return;
+ if(running){clearInterval(timer);timer=null;running=false;$('run').textContent='Play'}
+ else{running=true;$('run').textContent='Pause';timer=setInterval(stepGen,+$('spd').value)}
+};
+$('step').onclick=()=>{if(!over&&!running)stepGen()};
+$('end').onclick=()=>endTurn(false);$('clr').onclick=()=>{
+ if(locked())return;for(let i=0;i<W*H;i++)if(live[i]===cur)live[i]=0;draw();
+ sendState();
+};
+$('np').onchange=()=>{reset(true)};
+$('rst').onclick=()=>{reset(true)};$('ai').onchange=()=>{reset(true)};
+
+addEventListener('keydown',e=>{
+ if(/SELECT|INPUT|TEXTAREA/.test(e.target.tagName))return;
+ const k=+e.key,buttons=[...document.querySelectorAll('#tools button[data-t]')];
+ if(k>=1&&k<=buttons.length)buttons[k-1].click();
+ else if(e.key==='Enter'){e.preventDefault();$(N>1?'end':'run').click()}
+});
+
+function setupConnection(c){
+ conn = c;
+ conn.on('open', ()=>{
+   $('netStatus').textContent = `Connected! (Playing as Player ${assignedPlayer})`;
+   $('np').value = '2';$('ai').checked = false;
+   if(assignedPlayer === 1){
+     sendState();
+   }
+   updateTurnMsg();
+ });
+ conn.on('data', data=>{
+   if(data.type === 'CELL'){
+     live[data.i] = data.v;
+     draw();
+   } else if(data.type === 'STATE'){
+     live = new Uint8Array(data.live);
+     own = new Uint8Array(data.own);
+     space = data.space;
+     cur = data.cur;
+     gen = data.gen;
+     over = data.over;
+     updateTurnMsg();
+     draw();
+   } else if(data.type === 'END_TURN'){
+     endTurn(true);
+   }
+ });
+ conn.on('close', ()=>{
+   $('netStatus').textContent = 'Disconnected.';
+   assignedPlayer = 0;
+ });
+}
+
+function sendLiveCell(i, v){
+ if(conn && conn.open) conn.send({type:'CELL', i, v});
+}
+
+function sendState(){
+ if(!conn || !conn.open) return;
+ conn.send({
+   type: 'STATE',
+   live: Array.from(live),
+   own: Array.from(own),
+   space: space,
+   cur: cur,
+   gen: gen,
+   over: over
+ });
+}
+
+function sendTurnAction(){
+ if(conn && conn.open) conn.send({type:'END_TURN'});
+}
+
+$('hostBtn').onclick = ()=>{
+ assignedPlayer = 1;
+ $('netStatus').textContent = 'Creating room…';
+ peer = new Peer();
+ peer.on('open', id=>{
+   $('netStatus').innerHTML = `Room: <b>${id}</b> (Copied invite link!)`;
+   const url = location.protocol + '//' + location.host + location.pathname + '#join=' + id;
+   navigator.clipboard.writeText(url).catch(()=>{});
+   reset(false);
+ });
+ peer.on('connection', c => setupConnection(c));
+ peer.on('error', err => { $('netStatus').textContent = 'Error: ' + err.type; });
+};
+
+function joinRoom(id){
+ assignedPlayer = 2;
+ $('netStatus').textContent = 'Connecting to room…';
+ peer = new Peer();
+ peer.on('open', ()=>{
+   const c = peer.connect(id);
+   setupConnection(c);
+ });
+ peer.on('error', err => { $('netStatus').textContent = 'Error: ' + err.type; });
+}
+
+$('joinBtn').onclick = ()=>{
+ const id = $('joinId').value.trim();
+ if(id) joinRoom(id);
+};
+
+window.addEventListener('load', ()=>{
+ const m = location.hash.match(/#join=([a-zA-Z0-9-]+)/);
+ if(m && m[1]){
+   $('joinId').value = m[1];
+   joinRoom(m[1]);
+ }
+});
+
+reset();
+</script>
+</body>
+</html>
